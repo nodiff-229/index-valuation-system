@@ -1,0 +1,40 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+ENV/
+env/
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Logs
+logs/
+*.log
+
+# Database
+*.db
+*.duckdb
+
+# Output
+output/*.html
+output/*.json
+output/logs/
+Index_Valuation/*.xlsx
+
+# Config with secrets
+.env
+*.pem
+*.key
+
+# macOS
+.DS_Store
