@@ -169,28 +169,28 @@ def generate_excel(data: list, output_path: str, suspicious_indices: list = None
     BLUE_FILL = PatternFill(start_color="99CCFF", end_color="99CCFF", fill_type="solid")
     YELLOW_FILL = PatternFill(start_color="FFFF00", end_color="FFFF00", fill_type="solid")
     
-    # 设置列宽
+    # 设置列宽（根据内容调整）
     column_widths = {
-        'A': 15,  # 指数名称
-        'B': 8,   # PE
-        'C': 8,   # PB
-        'D': 10,  # 股息率
-        'E': 8,   # ROE
-        'F': 12,  # 盈利收益率
-        'G': 12,  # PE 百分位
-        'H': 12,  # PB 百分位
-        'I': 10,  # 估值区域
-        'J': 12,  # 定投建议
-        'K': 15,  # 博格公式建议
-        'L': 8,   # 数据状态
-        'M': 60,  # 原因分析
+        'A': 18,  # 指数名称
+        'B': 10,  # PE
+        'C': 10,  # PB
+        'D': 12,  # 股息率
+        'E': 10,  # ROE
+        'F': 14,  # 盈利收益率
+        'G': 14,  # PE 百分位
+        'H': 14,  # PB 百分位
+        'I': 14,  # 估值区域
+        'J': 14,  # 定投建议
+        'K': 18,  # 博格公式建议
+        'L': 12,  # 数据状态
+        'M': 80,  # 原因分析（长文本）
     }
     for col, width in column_widths.items():
         ws.column_dimensions[col].width = width
     
     # 设置行高
     for row in range(1, ws.max_row + 1):
-        ws.row_dimensions[row].height = 25
+        ws.row_dimensions[row].height = 30
     
     # 应用格式
     for row in range(1, ws.max_row + 1):
@@ -216,13 +216,19 @@ def generate_excel(data: list, output_path: str, suspicious_indices: list = None
             for col in range(1, ws.max_column + 1):
                 ws.cell(row=row, column=col).fill = YELLOW_FILL
         
-        # 设置字体
+        # 设置字体和对齐
         for col in range(1, ws.max_column + 1):
             cell = ws.cell(row=row, column=col)
-            cell.alignment = Alignment(wrap_text=True, vertical='center')
             
-            # 中文列用中文字体，数字列用 Times New Roman
-            if col in [1, 9, 10, 11, 13]:  # 指数名称、估值区域、定投建议、博格公式建议、原因分析
+            # 原因分析列（第 13 列）左对齐，其他列居中
+            if col == 13:  # 原因分析
+                cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='left')
+            else:
+                cell.alignment = Alignment(wrap_text=True, vertical='center', horizontal='center')
+            
+            # 所有列都用 Times New Roman 17 号（英文数字），中文用方正仿宋
+            # 指数名称、估值区域、定投建议、博格公式建议、原因分析用中文字体
+            if col in [1, 9, 10, 11, 13]:
                 cell.font = chinese_font
             else:
                 cell.font = numeric_font
