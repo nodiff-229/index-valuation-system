@@ -1,0 +1,4 @@
+# 指数估值表定时任务 - 每天 14:00 执行
+# 安装方法：crontab /Users/nodiff/.openclaw/workspace/index_valuation_system/cron.txt
+
+0 14 * * * /Users/nodiff/.openclaw/workspace/index_valuation_system/run_daily.sh
