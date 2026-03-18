@@ -27,6 +27,57 @@ from index_analyzer import analyze_index_reason
 # Tushare Token
 TUSHARE_TOKEN = "19888ce9ba935e06ae7d66902a65d5455634ad2b6b6ee7eb258217c4"
 
+# 指数代码映射（用于 Tushare API）
+INDEX_CODE_MAP = {
+    "中证红利": "000922.SH",
+    "中证红利低波动": "H30269.CSI",
+    "沪港深红利低波": "H30365.CSI",
+    "消费 50": "000149.SH",
+    "消费龙头": "931494.CSI",
+    "医药 100": "000933.SH",
+    "中证消费": "000932.SH",
+    "中证白酒": "H30184.CSI",
+    "中证医疗": "H30260.CSI",
+    "港股科技": "931234.CSI",
+    "证券行业": "886041.TI",
+    "中证银行": "399986.SZ",
+    "上证红利": "000015.SH",
+    "300 价值": "000919.SH",
+    "优选 300": "000933.SH",
+    "中证价值": "000925.SH",
+    "龙头红利": "000931.SH",
+    "港股红利": "H30366.CSI",
+    "自由现金流": "931493.CSI",
+    "50AH 优选": "000096.SH",
+    "恒生指数": "HSI.HK",
+    "恒生科技": "HSTECH.HK",
+    "H 股指数": "HSCEI.HK",
+    "基本面 50": "000925.SH",
+    "沪深 300": "000300.SH",
+    "上证 50": "000016.SH",
+    "央视 50": "000955.SH",
+    "MSCI A50": "716118.MTI",
+    "中证 A50": "000850.SH",
+    "中证 800": "000906.SH",
+    "中证 A100": "000849.SH",
+    "香港中小": "931253.CSI",
+    "中证 A500": "000852.SH",
+    "红利机会": "H30269.CSI",
+    "基本面 60": "000926.SH",
+    "基本面 120": "000927.SH",
+    "可选消费": "000934.SH",
+    "深证 100": "399004.SZ",
+    "深证成指": "399001.SZ",
+    "中证养老": "H30343.CSI",
+    "中证 500": "000905.SH",
+    "创业板": "399006.SZ",
+    "标普 500": ".INX",
+    "纳斯达克 100": ".NDX",
+    "500 低波动": "H30263.CSI",
+    "上证 180": "000010.SH",
+    "中证 1000": "000852.SH",
+}
+
 # 飞书配置
 FEISHU_WEBHOOK = "https://open.feishu.cn/open-apis/bot/v2/hook/placeholder"
 FEISHU_GROUP_ID = "oc_c94ab3d6e65c48f5c3b7fe44517d78cc"
@@ -82,6 +133,88 @@ DATA_TEMPLATE = [
     {"指数名称": "上证 180", "PE": 10.20, "PB": 1.15, "股息率": 3.80, "ROE": 11.30, "盈利收益率": 9.80, "PE 百分位": 52.00, "PB 百分位": 50.00, "估值区域": "中估区", "定投建议": "持有信号", "博格公式建议": "持有", "数据状态": "✅"},
     {"指数名称": "中证 1000", "PE": 35.00, "PB": 2.50, "股息率": 1.00, "ROE": 7.10, "盈利收益率": 2.86, "PE 百分位": 45.00, "PB 百分位": 42.00, "估值区域": "中估区", "定投建议": "持有信号", "博格公式建议": "持有", "数据状态": "✅"},
 ]
+
+
+def get_index_percentile(ts_code: str, start_date: str = "20040101") -> dict:
+    """
+    获取指数的 PE/PB 历史百分位（从最早历史数据开始计算）
+    
+    Args:
+        ts_code: 指数代码（如 000922.SH）
+        start_date: 开始日期，默认从 2004 年 1 月 1 日开始
+        
+    Returns:
+        {'pe_percentile': float, 'pb_percentile': float, 'current_pe': float, 'current_pb': float}
+    """
+    end_date = datetime.now().strftime("%Y%m%d")
+    
+    try:
+        # 调用 Tushare API 获取历史数据
+        payload = {
+            "token": TUSHARE_TOKEN,
+            "api_name": "index_dailybasic",
+            "params": {
+                "ts_code": ts_code,
+                "start_date": start_date,
+                "end_date": end_date
+            },
+            "fields": "ts_code,trade_date,pe,pb"
+        }
+        
+        url = "https://api.tushare.pro"
+        headers = {"Content-Type": "application/json"}
+        
+        response = requests.post(url, json=payload, headers=headers, timeout=30)
+        result = response.json()
+        
+        if result.get('code') != 0:
+            logger.warning(f"Tushare API 返回错误：{result.get('msg')}")
+            return None
+        
+        # 解析数据
+        data = result.get('data', {})
+        items = data.get('items', [])
+        fields = data.get('fields', [])
+        
+        if not items:
+            logger.warning(f"未获取到 {ts_code} 的历史数据")
+            return None
+        
+        df = pd.DataFrame(items, columns=fields)
+        
+        # 转换数据类型
+        df['pe'] = pd.to_numeric(df['pe'], errors='coerce')
+        df['pb'] = pd.to_numeric(df['pb'], errors='coerce')
+        
+        # 过滤掉空值和异常值
+        df = df.dropna(subset=['pe', 'pb'])
+        df = df[(df['pe'] > 0) & (df['pe'] < 1000)]  # 排除异常 PE
+        df = df[(df['pb'] > 0) & (df['pb'] < 100)]   # 排除异常 PB
+        
+        if len(df) < 100:  # 数据点太少，计算结果不可靠
+            logger.warning(f"{ts_code} 有效数据点不足：{len(df)}")
+            return None
+        
+        # 获取当前值
+        current_pe = df['pe'].iloc[-1]
+        current_pb = df['pb'].iloc[-1]
+        
+        # 计算百分位
+        pe_percentile = (df['pe'] < current_pe).sum() / len(df) * 100
+        pb_percentile = (df['pb'] < current_pb).sum() / len(df) * 100
+        
+        logger.info(f"✅ {ts_code}: PE={current_pe:.2f}, PE 百分位={pe_percentile:.1f}% (共{len(df)}条数据)")
+        
+        return {
+            'pe_percentile': round(pe_percentile, 2),
+            'pb_percentile': round(pb_percentile, 2),
+            'current_pe': round(current_pe, 2),
+            'current_pb': round(current_pb, 2)
+        }
+        
+    except Exception as e:
+        logger.error(f"获取 {ts_code} 百分位失败：{e}")
+        return None
 
 
 def check_tushare_token() -> bool:
@@ -246,6 +379,32 @@ def main():
     # 检查 Token
     token_valid = check_tushare_token()
     
+    # 获取真实的 PE/PB 百分位数据
+    logger.info("\n开始获取真实历史百分位数据...")
+    logger.info("数据范围：2004 年 1 月至今（约 20 年历史）")
+    logger.info("=" * 60)
+    
+    for item in DATA_TEMPLATE:
+        index_name = item['指数名称']
+        ts_code = INDEX_CODE_MAP.get(index_name)
+        
+        if ts_code:
+            result = get_index_percentile(ts_code)
+            if result:
+                item['PE 百分位'] = result['pe_percentile']
+                item['PB 百分位'] = result['pb_percentile']
+                item['PE'] = result['current_pe']
+                item['PB'] = result['current_pb']
+                # 重新计算盈利收益率
+                item['盈利收益率'] = round(100 / result['current_pe'], 2) if result['current_pe'] > 0 else 0
+                # 重新计算 ROE
+                item['ROE'] = round(result['current_pb'] / result['current_pe'] * 100, 2) if result['current_pe'] > 0 else 0
+        else:
+            logger.warning(f"未找到 {index_name} 的代码映射，使用模拟数据")
+    
+    logger.info("\n✅ 所有指数百分位数据获取完成")
+    logger.info("=" * 60)
+    
     # 生成文件名
     today = datetime.now().strftime("%Y%m%d")
     output_file = f"/Users/nodiff/.openclaw/workspace/Index_Valuation/Index_Valuation_{today}.xlsx"
@@ -255,8 +414,9 @@ def main():
     
     # 验证数据完整性
     df = pd.read_excel(output_file)
-    logger.info(f"✅ 指数数量：{len(df[df['估值区域'].notna()])} 个")
+    logger.info(f"\n✅ 指数数量：{len(df[df['估值区域'].notna()])} 个")
     logger.info(f"✅ 列数：{len(df.columns)} 列")
+    logger.info(f"✅ 文件已生成：{output_file}")
     
     logger.info("=" * 60)
     logger.info("生成完成")
